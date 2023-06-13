@@ -15,13 +15,19 @@ class Cookbook:
         recipe_files = [f for f in os.listdir(
             self.folderpath) if f.endswith(".txt")]
         self.num_recipes = len(recipe_files)
-        self.recipes = []
+        self.recipes = {}
+        self.type = {"Breakfast": [], "Lunch": [],
+                     "Dinner": [], "Snack": [], "Dessert": []}
         self.index = 0
         for recipe_name in recipe_files:
             # get cals and macros of recipe
             recipe_filepath = self.folderpath + '\\' + recipe_name
-            self.recipes.append(Recipe(recipe_filepath))
+            new_recipe = Recipe(recipe_filepath)
+            self.recipes[new_recipe.name] = new_recipe
+            for type_name in new_recipe.type:
+                self.type[type_name].append(new_recipe.name)
         print(self)
+        print(self.type)
 
     def __str__(self):
         """return name of cookbook and number of recipes"""
@@ -47,10 +53,9 @@ class Recipe:
     def __init__(self, filepath):
         self.filepath = filepath
         with open(self.filepath, 'r', encoding='utf-8') as recipe:
-            self.name = recipe.readline()
-            servings_line = recipe.readline()
-            # check that servings line is correct format
-            self.servings = eval(servings_line[0])
+            self.name = recipe.readline().strip()
+            # ensure types are in cookbook keys
+            self.type = recipe.readline().strip().split(", ")
             nutrition_line = recipe.readline().split('|')
             self.calories = eval(nutrition_line[0].strip()[0])
             self.protein = eval(nutrition_line[1].strip()[0])
@@ -74,8 +79,8 @@ class Recipe:
         with open(recipe_filepath, 'w', encoding='utf-8') as new_recipe:
             print(f'Writing {recipe_name} recipe...')
             new_recipe.write(f'{recipe_name}\n')
-            servings = eval(input("Enter the number of servings: "))
-            new_recipe.write(f'{servings} Servings\n')
+            types = input("List the type(s) of recipe: ")
+            new_recipe.write(types)
             new_recipe.write(
                 "X cal | X P | X C | X F\nIngredients\nquantity\tunit\tingredient\n")
             print('Enter ingredients (quantity\tunit\tingredient)\nor "Q" to finish:')
@@ -98,7 +103,7 @@ class Recipe:
                 new_recipe.write(f'{step_num}. {step}\n')
                 step_num += 1
             # calculate macros
-            recipe_ingredients.calculate_nutrition(servings)
+            recipe_ingredients.calculate_nutrition()
         # read entire recipe
         with open(recipe_filepath, 'r', encoding='utf-8') as new_recipe:
             recipe = new_recipe.readlines()
@@ -113,8 +118,10 @@ class Recipe:
 
 
 class IngredientList:
-    # init ingredients from csv or init empty dataframe
+    """Container for ingredient objects"""
+
     def __init__(self, filepath=None):
+        """init ingredients from csv or init empty dataframe"""
         self.filepath = filepath
         self.total_nutrition = {}
         if self.filepath is None:
@@ -125,22 +132,25 @@ class IngredientList:
         self.ingredients.set_index(['ingredient'], inplace=True)
 
     def add_ingredient(self, ingredient):
+        """appends an ingredient object to the ingredient list dataframe, self.ingredients"""
         new_ingredient = pd.DataFrame(ingredient.as_dict())
         new_ingredient.set_index(['ingredient'], inplace=True)
-        self.ingredients = pd.concat([self.ingredients, new_ingredient], ignore_index=False)
+        self.ingredients = pd.concat(
+            [self.ingredients, new_ingredient], ignore_index=False)
 
     def __len__(self):
         return len(self.ingredients.index)
 
-    def calculate_nutrition(self, servings):
+    def calculate_nutrition(self):
         """calculates the nutrition of a recipe given the ingredients list"""
         for nut in ['cal', 'prot', 'carb', 'fat']:
             self.total_nutrition[nut] = int(
-                np.sum(np.array(self.ingredients[nut].values))//servings)
+                np.sum(np.array(self.ingredients[nut].values)))
         return self.total_nutrition
 
     @property
     def nutrition(self):
+        """returns the nutrition information of an ingredient list in a pipe separated format"""
         nutrition = [f' {v:d} {k} ' for k, v in self.total_nutrition.items()]
         return '|'.join(nutrition)
 
@@ -159,10 +169,12 @@ class Ingredient:
         self.itype = itype
 
     def pack(self):
+        """packs the object attributes into a series"""
         return pd.Series([self.quantity, self.unit, self.name, self.calories, self.protein, self.carb, self.fat, self.itype])
-    
+
     def as_dict(self):
-        return {k:[v] for k, v in zip(["quantity", "unit", "ingredient", "cal", "prot", "carb", "fat", "itype"], self.pack())}
+        """returns the object attributes as items of a dictionary"""
+        return {k: [v] for k, v in zip(["quantity", "unit", "ingredient", "cal", "prot", "carb", "fat", "itype"], self.pack())}
 
     @classmethod
     def create_ingredient(cls):
@@ -170,6 +182,7 @@ class Ingredient:
 
     @classmethod
     def from_recipe(cls, raw_ingredient):
+        """alternate constructor that creates an ingredient object using partial info from a recipe and nutrition info from ingredient bank"""
         ingredient_info = raw_ingredient.split('\t')
         # convert quantity to number type
         ingredient_info[0] = eval(ingredient_info[0])
@@ -183,9 +196,11 @@ class Ingredient:
 
     @staticmethod
     def peek(ingredient):
+        """displays the information about an ingredient in the ingredient bank"""
         print(bank.ingredients.loc[ingredient])
 
 
 my_cookbook = Cookbook('Cookbook')
 bankpath = os.getcwd() + "\\Ingredients.csv"
 bank = IngredientList(bankpath)
+print("bank collected")
